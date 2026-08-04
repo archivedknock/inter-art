@@ -4,7 +4,7 @@
 
 **웹캠으로 손과 얼굴의 움직임을 인식해 반응하는 인터랙티브 아트웍**
 
-[![Live Demo](https://img.shields.io/badge/▶_작품_보기-archiveknock.github.io-22d3ee?style=for-the-badge)](https://archiveknock.github.io/inter-art/)
+[![Live Demo](https://img.shields.io/badge/▶_작품_보기-archivedknock.github.io-22d3ee?style=for-the-badge)](https://archivedknock.github.io/inter-art/)
 
 [![MediaPipe](https://img.shields.io/badge/MediaPipe-Tasks_Vision_1.0.1-0097A7?style=flat-square&logo=google)](https://ai.google.dev/edge/mediapipe/solutions/vision)
 ![No Build](https://img.shields.io/badge/빌드_도구-불필요-4ade80?style=flat-square)
