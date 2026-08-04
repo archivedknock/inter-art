@@ -129,12 +129,31 @@ function handOf(lm, W, H) {
   // 주먹이면 기도가 아니다. 합장은 손가락이 붙어 곧게 서므로 손목에서 멀어진다.
   const open = Math.hypot(mid.x - wrist.x, mid.y - wrist.y) > size * 1.15;
 
-  return { cx, cy, size, wrist, mid, upright, open };
+  // 손날이 보이는가 — 검지 밑동과 새끼 밑동이 겹쳐 보이면 손을 세운 것이다.
+  // 손등이나 손바닥을 보이면 이 폭이 넓어진다. 합장은 늘 손날 쪽이 카메라를 향한다.
+  const span = Math.hypot((lm[5].x - lm[17].x) * W, (lm[5].y - lm[17].y) * H);
+  const edge = span < size * 0.45;
+
+  return { cx, cy, size, wrist, mid, upright, open, edge };
 }
 
-/** 두 손을 모았는가 — 모았다면 그 자리를 돌려준다 */
-export function prayerOf(handResult, W, H) {
+/** 두 손을 모았는가 — 모았다면 그 자리를 돌려준다.
+ *
+ *  합장은 반드시 두 손이 맞닿는 것으로 시작한다. 그 뒤에야 손이 겹쳐
+ *  하나로 뭉쳐 보이는 구간이 온다. 그래서 두 손을 먼저 확인하고,
+ *  한 손 판정은 그 직후에만 인정한다 — 손 하나만 든 것과 구분하는 근거다. */
+export function prayerOf(handResult, W, H, joined = false) {
   const lms = (handResult?.landmarks ?? []).slice(0, 2);
+
+  // 두 손이 붙어 있다가 겹쳐 하나로 잡히는 구간. 직전에 합장을 확인했을 때만
+  // 기도로 본다. 손날 여부까지 함께 봐야 손 하나를 세운 것이 새어들지 않는다.
+  if (lms.length === 1) {
+    if (!joined) return null;
+    const a = handOf(lms[0], W, H);
+    if (!a.upright || !a.open || !a.edge) return null;
+    return { x: a.cx, y: a.cy, tip: a.mid, size: a.size, merged: true };
+  }
+
   if (lms.length < 2) return null;
 
   const a = handOf(lms[0], W, H);
@@ -145,9 +164,11 @@ export function prayerOf(handResult, W, H) {
 
   // 두 손이 맞닿아 있어야 한다. 손바닥 중심끼리는 합장을 해도 손 두께만큼
   // 떨어지므로, 손끝이 서로 가까운지를 함께 본다 — 이쪽이 훨씬 잘 잡힌다.
+  // 실제로 붙였을 때 중심은 손 크기의 0.5배, 손끝은 거의 0까지 붙는다.
+  // 주먹 하나가 들어갈 만큼 떨어지면 기도가 아니므로 그 위에서 끊는다.
   const gap = Math.hypot(a.cx - b.cx, a.cy - b.cy);
   const tipGap = Math.hypot(a.mid.x - b.mid.x, a.mid.y - b.mid.y);
-  if (gap > size * 2.2 || tipGap > size * 1.4) return null;
+  if (gap > size * 0.7 || tipGap > size * 0.7) return null;
 
   return {
     x: (a.cx + b.cx) / 2,
@@ -167,6 +188,21 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+}
+
+/** 자리에 맞춰 글자를 그린다 — 넘치면 글자 크기를 줄인다.
+ *
+ *  에러 코드는 길이가 제각각이고 창은 화면 비율을 따라 좁아지기도 한다.
+ *  잘라내면 무슨 오류인지 알 수 없으니, 줄여서라도 끝까지 보여준다. */
+function fitText(ctx, text, x, y, maxW, size, weight) {
+  let s = size;
+  ctx.font = `${weight} ${s}px ${FONT}`;
+  const w = ctx.measureText(text).width;
+  if (w > maxW) {
+    s = Math.max(size * 0.62, (s * maxW) / w);
+    ctx.font = `${weight} ${s}px ${FONT}`;
+  }
+  ctx.fillText(text, x, y, maxW);
 }
 
 /** 모은 손을 감싸는 후광과 빛줄기 */
@@ -217,13 +253,13 @@ function clock(ms) {
  *
  *  99%에 닿기 전에는 진행 속도로 어림잡고, 닿은 뒤로는 기도가 정하는
  *  실제 남은 시간을 그대로 쓴다. 시작 직후에는 아직 셈할 수 없어 --를 띄운다. */
-function remainOf(state, pct, left, spent) {
+function remainOf(state, pct, left, spent, rate, penalty) {
   if (state === "done") return "00:00:00";
   if (state === "stuck" || state === "error") return clock(left);
   if (spent < 700 || pct < 1) return "--:--:--";
-  // 최근 속도로 남은 몫을 환산한다. 기도하는 동안에는 빨라지니 줄어들고,
-  // 손을 놓으면 기어가는 속도가 반영되어 도로 불어난다.
-  return clock((spent / pct) * (100 - pct));
+  // 지금 속도로 남은 몫을 환산하고, 손을 놓고 있던 시간을 벌점으로 얹는다.
+  // 기도하는 동안에는 줄어들고, 놓고 있으면 끝없이 불어난다.
+  return clock(((100 - pct) / Math.max(rate, 0.01)) * 1000 + penalty * 2);
 }
 
 const MONO = `"SF Mono", "Menlo", "Consolas", "Courier New", monospace`;
@@ -262,7 +298,7 @@ function statusColor(state, growing) {
   return "rgba(232,236,241,0.7)";
 }
 
-function drawProgress(ctx, W, H, pct, state, t, left, spent) {
+function drawProgress(ctx, W, H, pct, state, t, left, spent, rate, penalty) {
   const fail = state === "error";
   const done = state === "done";
   const growing = state === "stuck" && left > STUCK_MS;
@@ -369,14 +405,15 @@ function drawProgress(ctx, W, H, pct, state, t, left, spent) {
   // 남은 시간이 도로 늘어나면 붉게 — 편집자가 가장 싫어하는 장면이다
   ctx.textAlign = "right";
   ctx.fillStyle = fail ? "#ff5c57" : growing ? "#ff9f4a" : "rgba(232,236,241,0.9)";
-  ctx.fillText(remainOf(state, pct, left, spent), bx + bw, ly + ls * 1.5);
+  ctx.fillText(remainOf(state, pct, left, spent, rate, penalty), bx + bw, ly + ls * 1.5);
 
   ctx.restore();
 }
 
 /** 결과 창 — 실패이거나 완료이거나 */
 function drawResult(ctx, W, H, t, k, code, ok) {
-  const w = Math.min(W * 0.62, H * 1.05);
+  // 세로 화면은 폭이 좁아 에러 코드가 들어갈 자리가 나오지 않는다.
+  const w = Math.min(W * (H > W ? 0.9 : 0.62), H * 1.05);
   const h = w * 0.4;
   const x = (W - w) / 2, y = (H - h) / 2;
   const bar = h * 0.24;
@@ -443,12 +480,18 @@ function drawResult(ctx, W, H, t, k, code, ok) {
     ctx.fill();
   }
 
+  // 글자는 아이콘 오른쪽부터 창 끝까지만 쓴다. 에러 코드는 길이가 제각각이라
+  // 그냥 그리면 창을 뚫고 나간다 — 자리에 맞춰 글자를 줄인다.
+  const tx = cx + r * 1.5;
+  const tw = x + w - w * 0.045 - tx;
+
   ctx.fillStyle = "#1f2937";
   ctx.font = `600 ${h * 0.125}px ${FONT}`;
-  ctx.fillText(ok ? "렌더링을 마쳤습니다" : "99%에서 오류가 발생했습니다", x + w * 0.24, cy - h * 0.055);
-  ctx.font = `400 ${h * 0.1}px ${FONT}`;
+  fitText(ctx, ok ? "렌더링을 마쳤습니다" : "99%에서 오류가 발생했습니다",
+          tx, cy - h * 0.055, tw, h * 0.125, "600");
   ctx.fillStyle = "#6b7280";
-  ctx.fillText(ok ? "기도가 통했습니다. 출력 파일이 저장되었습니다." : code, x + w * 0.24, cy + h * 0.09);
+  fitText(ctx, ok ? "기도가 통했습니다. 출력 파일이 저장되었습니다." : code,
+          tx, cy + h * 0.09, tw, h * 0.1, "400");
 
   const bw = w * 0.24, bh = h * 0.18, by = y + h - bh - h * 0.09;
   const labels = ok ? ["확인"] : ["다시 시도", "무시"];
@@ -485,7 +528,16 @@ const IDLE_RATE = 0.08;       // 기도하지 않을 때의 인코딩 속도 (�
 const STUCK_MS = 7000;        // 99%에 닿았을 때 남은 시간
 const GIVEUP_MS = 14000;      // 여기까지 늘어나면 렌더러가 죽는다
 const REGROW = 2.2;           // 손을 풀면 이 배로 다시 늘어난다
+const BLESS_RATE = 0.3;       // 끝까지 버텼을 때 그래도 살아남을 확률
 const HOLD_MS = { error: 4200, done: 3400 };   // 결과 창이 떠 있는 시간
+
+// 손을 놓친 뒤 기도가 풀리기까지의 유예. 겹친 손은 검출이 오락가락하므로
+// 이만큼은 붙잡아 둔다. 손을 정말 내리면 이 시간 뒤에 풀린다.
+const PRAYER_GRACE_MS = 400;
+
+// 두 손 합장을 확인한 뒤, 겹쳐서 하나로 보이는 것을 기도로 봐 주는 시간.
+// 손을 모은 채로는 계속 갱신되므로 기도를 오래 유지해도 끊기지 않는다.
+const MERGE_GRACE_MS = 1200;
 
 export class PrayRender {
   constructor() {
@@ -504,6 +556,12 @@ export class PrayRender {
     this.shake = 0;
     this.lastTick = 0;
     this.last = 0;
+    this.prayer = null;     // 마지막으로 잡은 기도 자리
+    this.lostAt = 0;        // 놓치기 시작한 시각
+    this.joinedAt = -1e9;   // 두 손으로 합장을 확인한 시각
+    this.blessed = false;   // 99%에 닿는 순간 정해지는 이번 판의 운
+    this.rate = 17;         // 남은 시간을 셈하는 지금 속도 (%/초)
+    this.penalty = 0;       // 손을 놓고 있던 시간 — 남은 시간에 얹힌다
   }
 
   update(dt, W, H, prayer, t) {
@@ -531,9 +589,17 @@ export class PrayRender {
 
       if (this.left <= 0) {
         this.left = 0;
-        this.state = "done";
-        this.endAt = t;
-        fanfare();
+        // 끝까지 버텨도 대개는 죽는다. 기도는 통하지 않는다.
+        if (this.blessed) {
+          this.state = "done";
+          this.endAt = t;
+          fanfare();
+        } else {
+          this.state = "error";
+          this.endAt = t;
+          this.shake = 420;
+          crash();
+        }
       } else if (this.left >= GIVEUP_MS) {
         this.state = "error";
         this.endAt = t;
@@ -559,6 +625,15 @@ export class PrayRender {
     // 처음엔 시원하게 오르다가 끝으로 갈수록 굼떠진다.
     const base = this.pct < 70 ? 17 : this.pct < 90 ? 7 : 2.2;
     const speed = prayer ? base : base * IDLE_RATE;
+
+    // 남은 시간은 지금 속도로 셈하되, 손을 놓고 있는 동안에는 계속 불어난다.
+    // 진행률에서만 역산하면 놓고 기다릴수록 오히려 줄어든다 — 진행이 느리게라도
+    // 계속 오르기 때문이다. 그래서 놓은 시간만큼 벌점을 따로 쌓는다.
+    this.rate += (speed - this.rate) * Math.min(1, sec * 1.4);
+    this.penalty = prayer
+      ? Math.max(0, this.penalty - dt * 1.5)   // 다시 모으면 빠르게 걷힌다
+      : this.penalty + dt;
+
     const before = Math.floor(this.pct);
     this.pct = Math.min(99, this.pct + speed * sec);
     if (Math.floor(this.pct) !== before && t - this.lastTick > 60) {
@@ -566,10 +641,12 @@ export class PrayRender {
       tick(this.pct);
     }
 
-    // 99%에 닿으면 여기서부터 남은 시간 싸움이다
+    // 99%에 닿으면 여기서부터 남은 시간 싸움이다.
+    // 성공 여부는 여기서 이미 정해진다 — 버티는 동안에는 알 수 없을 뿐이다.
     if (this.pct >= 99) {
       this.state = "stuck";
       this.left = STUCK_MS;
+      this.blessed = Math.random() < BLESS_RATE;
     }
 
     if (prayer) this.emitSpark(prayer, H);
@@ -607,7 +684,31 @@ export class PrayRender {
     const dt = Math.min(64, this.last ? t - this.last : 16);
     this.last = t;
 
-    const prayer = prayerOf(handResult, W, H);
+    // 손이 겹쳐 있으면 검출이 프레임마다 오간다. 그때마다 기도가 끊기면
+    // 진행이 계속 멈추므로, 잠깐 놓친 것은 붙잡고 있던 것으로 친다.
+    //
+    // 한 손으로 뭉쳐 보이는 구간은 두 손 합장을 방금 확인했을 때만 인정한다.
+    // 그래서 두 손으로 확인한 시각을 따로 들고 다닌다 — 손 하나만 세운 사람은
+    // 이 시각이 없으므로 아무리 손날을 보여도 기도가 시작되지 않는다.
+    const joined = t - this.joinedAt < MERGE_GRACE_MS;
+    const found = prayerOf(handResult, W, H, joined);
+    if (found) {
+      // 합장이 이어지는 동안에는 계속 갱신한다. 두 손일 때만 갱신하면
+      // 손이 완전히 겹친 채로 몇 초가 지날 때 시효가 끝나 기도가 풀린다.
+      this.joinedAt = t;
+      this.prayer = found;
+      this.lostAt = 0;
+    } else if (this.prayer) {
+      this.lostAt ||= t;
+      if (t - this.lostAt > PRAYER_GRACE_MS) {
+        this.prayer = null;
+        // 손을 놓쳤으면 합장도 끝난 것으로 본다. 이걸 남겨 두면 손 하나를
+        // 세운 것만으로 기도가 이어진다.
+        this.joinedAt = -1e9;
+      }
+    }
+    const prayer = this.prayer;
+
     this.update(dt, W, H, prayer, t);
 
     // 이후로는 미러를 풀고 화면 좌표에서 그린다 (글자가 뒤집히지 않도록)
@@ -653,7 +754,7 @@ export class PrayRender {
       ctx.fillRect(0, 0, W, H);
     }
 
-    drawProgress(ctx, W, H, this.pct, this.state, t, this.left, this.spent);
+    drawProgress(ctx, W, H, this.pct, this.state, t, this.left, this.spent, this.rate, this.penalty);
 
     if (this.state === "error" || this.state === "done") {
       drawResult(ctx, W, H, t, (t - this.endAt) / 220, this.code, this.state === "done");
