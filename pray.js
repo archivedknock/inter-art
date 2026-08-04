@@ -267,8 +267,10 @@ function drawProgress(ctx, W, H, pct, state, t, left, spent) {
   const done = state === "done";
   const growing = state === "stuck" && left > STUCK_MS;
 
-  // 패널 — 주인공은 기도하는 손이므로 창은 작게, 그리고 비쳐 보이게 둔다
-  const pw = Math.min(W * 0.42, H * 0.86);
+  // 패널 — 주인공은 기도하는 손이므로 창은 작게, 그리고 비쳐 보이게 둔다.
+  // 세로 화면은 폭이 좁아 같은 비율로는 창이 너무 작아진다. 비율만 키우고
+  // 높이는 폭에서 따라오므로 창의 생김새는 그대로다.
+  const pw = Math.min(W * (H > W ? 0.72 : 0.42), H * 0.86);
   const ph = pw * 0.3;
   const px = (W - pw) / 2;
   const py = H * 0.71;
