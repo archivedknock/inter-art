@@ -15,7 +15,7 @@ export const WORKS = {
     name: "렌더링 성공 기도하기",
     icon: "🙏",
     page: "pray.html",
-    tag: "기도하는 만큼 렌더링이 빨라집니다",
+    tag: "합장이든 반장이든, 기도하는 만큼 렌더링이 빨라집니다",
     tasks: ["hand"],
   },
   undo: {
