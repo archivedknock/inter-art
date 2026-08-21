@@ -129,29 +129,27 @@ function handOf(lm, W, H) {
   // 주먹이면 기도가 아니다. 합장은 손가락이 붙어 곧게 서므로 손목에서 멀어진다.
   const open = Math.hypot(mid.x - wrist.x, mid.y - wrist.y) > size * 1.15;
 
-  // 손날이 보이는가 — 검지 밑동과 새끼 밑동이 겹쳐 보이면 손을 세운 것이다.
-  // 손등이나 손바닥을 보이면 이 폭이 넓어진다. 합장은 늘 손날 쪽이 카메라를 향한다.
-  const span = Math.hypot((lm[5].x - lm[17].x) * W, (lm[5].y - lm[17].y) * H);
-  const edge = span < size * 0.45;
+  // 손가락을 붙여 세웠는가. 반장은 네 손가락을 붙이고, 그냥 든 손은 벌어진다.
+  // 겹쳐서 손날만 보이는 합장도 손끝이 포개지므로 같은 조건에 걸린다.
+  const tipSpan = Math.hypot((lm[8].x - lm[20].x) * W, (lm[8].y - lm[20].y) * H);
+  const together = tipSpan < size * 0.9;
 
-  return { cx, cy, size, wrist, mid, upright, open, edge };
+  return { cx, cy, size, wrist, mid, upright, open, together };
 }
 
-/** 두 손을 모았는가 — 모았다면 그 자리를 돌려준다.
+/** 기도하는 손인가 — 맞다면 그 자리를 돌려준다.
  *
- *  합장은 반드시 두 손이 맞닿는 것으로 시작한다. 그 뒤에야 손이 겹쳐
- *  하나로 뭉쳐 보이는 구간이 온다. 그래서 두 손을 먼저 확인하고,
- *  한 손 판정은 그 직후에만 인정한다 — 손 하나만 든 것과 구분하는 근거다. */
-export function prayerOf(handResult, W, H, joined = false) {
+ *  두 손이면 합장, 한 손이면 반장이다. 합장을 하다 손이 겹쳐 하나로 잡히는
+ *  구간도 한 손 판정으로 넘어간다 — 손날만 보일 때 손끝이 포개지므로
+ *  반장과 같은 조건에 걸린다. */
+export function prayerOf(handResult, W, H) {
   const lms = (handResult?.landmarks ?? []).slice(0, 2);
 
-  // 두 손이 붙어 있다가 겹쳐 하나로 잡히는 구간. 직전에 합장을 확인했을 때만
-  // 기도로 본다. 손날 여부까지 함께 봐야 손 하나를 세운 것이 새어들지 않는다.
+  // 반장. 손가락을 붙여야 인정한다 — 그냥 든 손이 새어들지 않는 근거다.
   if (lms.length === 1) {
-    if (!joined) return null;
     const a = handOf(lms[0], W, H);
-    if (!a.upright || !a.open || !a.edge) return null;
-    return { x: a.cx, y: a.cy, tip: a.mid, size: a.size, merged: true };
+    if (!a.upright || !a.open || !a.together) return null;
+    return { x: a.cx, y: a.cy, tip: a.mid, size: a.size };
   }
 
   if (lms.length < 2) return null;
@@ -535,10 +533,6 @@ const HOLD_MS = { error: 4200, done: 3400 };   // 결과 창이 떠 있는 시�
 // 이만큼은 붙잡아 둔다. 손을 정말 내리면 이 시간 뒤에 풀린다.
 const PRAYER_GRACE_MS = 400;
 
-// 두 손 합장을 확인한 뒤, 겹쳐서 하나로 보이는 것을 기도로 봐 주는 시간.
-// 손을 모은 채로는 계속 갱신되므로 기도를 오래 유지해도 끊기지 않는다.
-const MERGE_GRACE_MS = 1200;
-
 export class PrayRender {
   constructor() {
     this.reset();
@@ -558,7 +552,6 @@ export class PrayRender {
     this.last = 0;
     this.prayer = null;     // 마지막으로 잡은 기도 자리
     this.lostAt = 0;        // 놓치기 시작한 시각
-    this.joinedAt = -1e9;   // 두 손으로 합장을 확인한 시각
     this.blessed = false;   // 99%에 닿는 순간 정해지는 이번 판의 운
     this.rate = 17;         // 남은 시간을 셈하는 지금 속도 (%/초)
     this.penalty = 0;       // 손을 놓고 있던 시간 — 남은 시간에 얹힌다
@@ -686,26 +679,13 @@ export class PrayRender {
 
     // 손이 겹쳐 있으면 검출이 프레임마다 오간다. 그때마다 기도가 끊기면
     // 진행이 계속 멈추므로, 잠깐 놓친 것은 붙잡고 있던 것으로 친다.
-    //
-    // 한 손으로 뭉쳐 보이는 구간은 두 손 합장을 방금 확인했을 때만 인정한다.
-    // 그래서 두 손으로 확인한 시각을 따로 들고 다닌다 — 손 하나만 세운 사람은
-    // 이 시각이 없으므로 아무리 손날을 보여도 기도가 시작되지 않는다.
-    const joined = t - this.joinedAt < MERGE_GRACE_MS;
-    const found = prayerOf(handResult, W, H, joined);
+    const found = prayerOf(handResult, W, H);
     if (found) {
-      // 합장이 이어지는 동안에는 계속 갱신한다. 두 손일 때만 갱신하면
-      // 손이 완전히 겹친 채로 몇 초가 지날 때 시효가 끝나 기도가 풀린다.
-      this.joinedAt = t;
       this.prayer = found;
       this.lostAt = 0;
     } else if (this.prayer) {
       this.lostAt ||= t;
-      if (t - this.lostAt > PRAYER_GRACE_MS) {
-        this.prayer = null;
-        // 손을 놓쳤으면 합장도 끝난 것으로 본다. 이걸 남겨 두면 손 하나를
-        // 세운 것만으로 기도가 이어진다.
-        this.joinedAt = -1e9;
-      }
+      if (t - this.lostAt > PRAYER_GRACE_MS) this.prayer = null;
     }
     const prayer = this.prayer;
 
