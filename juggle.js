@@ -300,70 +300,76 @@ function drawHat(ctx, f) {
   ctx.restore();
 }
 
-/** 강제 종료 알림 — 아래 패널이 어도비인 것과 달리 이쪽은 macOS 얼굴이다 */
+/** 강제 종료 알림 — 안에서 도는 것이 어도비여도 알림 자체는 macOS 얼굴이다 */
 function drawAlert(ctx, W, H, a, t) {
   const k = clamp((t - a.at) / 180, 0, 1);
-  const w = Math.min(W * 0.46, H * 0.88);
-  const h = w * 0.44;
+  const w = Math.min(W * 0.5, H * 0.95);
+  const h = w * 0.52;
   const x = (W - w) / 2, y = (H - h) / 2;
 
   ctx.save();
   ctx.globalAlpha = k;
+
+  // 별밭 위에 그대로 얹으면 글자가 읽히지 않는다. 뒤를 흐린 뒤 창을 올린다.
+  // 캔버스를 조금 키워 그려야 흐림이 가장자리 바깥의 빈자리를 물어 오지 않는다.
+  const over = H * 0.03;
+  ctx.filter = `blur(${Math.round(H * 0.022)}px)`;
+  ctx.drawImage(ctx.canvas, -over, -over, W + over * 2, H + over * 2);
+  ctx.filter = "none";
+
   ctx.translate(W / 2, H / 2);
-  ctx.scale(0.94 + 0.06 * k, 0.94 + 0.06 * k);
+  ctx.scale(0.96 + 0.04 * k, 0.96 + 0.04 * k);
   ctx.translate(-W / 2, -H / 2);
 
-  ctx.shadowColor = "rgba(0,0,0,0.45)";
-  ctx.shadowBlur = h * 0.24;
-  ctx.shadowOffsetY = h * 0.06;
-  roundRect(ctx, x, y, w, h, h * 0.075);
-  ctx.fillStyle = "#f2f2f2";
+  ctx.shadowColor = "rgba(0,0,0,0.4)";
+  ctx.shadowBlur = h * 0.16;
+  ctx.shadowOffsetY = h * 0.05;
+  roundRect(ctx, x, y, w, h, h * 0.085);
+  ctx.fillStyle = "#f5f5f5";
   ctx.fill();
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
 
-  const pad = h * 0.13;
-  const is = h * 0.34;
+  // 종료된 프로그램의 아이콘이 가운데 위에 놓이고, 글도 모두 가운데로 선다
+  drawIcon(ctx, { app: a.app, x: x + w / 2, y: y + h * 0.225, r: h * 0.145, phase: 0 }, 0, k);
 
-  // 종료된 프로그램의 아이콘이 알림 왼쪽 위에 붙는다
-  drawIcon(ctx, { app: a.app, x: x + pad + is / 2, y: y + pad + is / 2, r: is / 2, phase: 0 }, 0);
-
-  const tx = x + pad + is + h * 0.1;
-  const maxW = x + w - pad - tx;
-  ctx.textAlign = "left";
+  const maxW = w - h * 0.2;
+  ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = "#1d1d1f";
   fitText(ctx, `'${APPS[a.app].name}'이(가) 예기치 않게 종료되었습니다.`,
-    tx, y + pad + h * 0.15, maxW, h * 0.125, "600");
-  ctx.fillStyle = "#6b6b70";
-  fitText(ctx, "저장하지 않은 변경 사항은 복구할 수 없습니다.",
-    tx, y + pad + h * 0.32, maxW, h * 0.105, "400");
+    x + w / 2, y + h * 0.5, maxW, h * 0.082, "600");
+  ctx.fillStyle = "#86868b";
+  fitText(ctx, "저장하지 않은 변경사항은 복구할 수 없습니다.",
+    x + w / 2, y + h * 0.61, maxW, h * 0.062, "400");
+
+  // 단추 줄을 가르는 선
+  ctx.fillStyle = "rgba(0,0,0,0.09)";
+  ctx.fillRect(x, y + h * 0.7, w, Math.max(1, h * 0.003));
 
   // 확인하는 단추가 오른쪽, 파란 기본값이다
-  const bh = h * 0.2, by = y + h - pad - bh;
+  const bh = h * 0.135, by = y + h * 0.85 - bh / 2;
   const labels = ["무시", "리포트…", "다시 열기"];
-  const fs = h * 0.105;
+  const fs = h * 0.062, gap = h * 0.05;
   ctx.font = `500 ${fs}px ${FONT}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+  const bws = labels.map((l) => Math.max(ctx.measureText(l).width + fs * 2.4, h * 0.34));
 
-  let bx = x + w - pad;
-  for (let i = labels.length - 1; i >= 0; i--) {
-    const bw = Math.max(ctx.measureText(labels[i]).width + fs * 1.9, h * 0.34);
-    bx -= bw;
+  let bx = x + (w - bws.reduce((s, v) => s + v, 0) - gap * (labels.length - 1)) / 2;
+  ctx.textBaseline = "middle";
+  labels.forEach((label, i) => {
     const on = i === labels.length - 1;
-    roundRect(ctx, bx, by, bw, bh, bh * 0.28);
-    ctx.fillStyle = on ? "#007aff" : "#fdfdfd";
+    roundRect(ctx, bx, by, bws[i], bh, bh * 0.22);
+    ctx.fillStyle = on ? "#007aff" : "#ffffff";
     ctx.fill();
     if (!on) {
-      ctx.strokeStyle = "rgba(0,0,0,0.14)";
-      ctx.lineWidth = Math.max(1, h * 0.006);
+      ctx.strokeStyle = "rgba(0,0,0,0.12)";
+      ctx.lineWidth = Math.max(1, h * 0.004);
       ctx.stroke();
     }
     ctx.fillStyle = on ? "#ffffff" : "#1d1d1f";
-    ctx.fillText(labels[i], bx + bw / 2, by + bh / 2);
-    bx -= h * 0.05;
-  }
+    ctx.fillText(label, bx + bws[i] / 2, by + bh / 2);
+    bx += bws[i] + gap;
+  });
 
   ctx.restore();
 }
