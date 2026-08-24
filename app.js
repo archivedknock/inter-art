@@ -6,7 +6,6 @@ import {
   FilesetResolver,
   HandLandmarker,
   FaceLandmarker,
-  ImageSegmenter,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1";
 
 import { SaveChallenge, fingertipsOf } from "./save.js";
@@ -23,7 +22,6 @@ const WASM =
 const MODELS = {
   hand: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
   face: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-  seg: "https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/1/selfie_segmenter.tflite",
 };
 
 export function start(effect) {
@@ -46,7 +44,7 @@ export function start(effect) {
   let lastTs = -1;
   const lastResults = {};     // 모델별 마지막 추론 결과
   const lastVideoTimes = {};  // 모델별로 마지막에 처리한 영상 시각
-  const strideAt = { seg: 1 };  // 걸러 돌리는 모델의 차례. 얼굴과 한 프레임씩 엇갈리게 둔다.
+  const strideAt = {};        // 걸러 돌리는 모델의 차례
   let loopError = false;
 
   // 툴바 토글의 상태. 휴대폰은 GPU 연산이 아무것도 못 알아보는 사례가 잦아
@@ -138,7 +136,7 @@ export function start(effect) {
   // VIDEO 모드는 이전 프레임의 추적 영역(ROI)을 이어받는데, 이 값이 NaN으로 깨지면
   // 그래프가 영구히 실패한다. 그때는 IMAGE 모드로 내려간다 — 매 프레임 새로 검출하므로
   // 이어받는 상태가 없어 같은 오류가 날 수 없다.
-  const runMode = { hand: "VIDEO", face: "VIDEO", seg: "VIDEO" };
+  const runMode = { hand: "VIDEO", face: "VIDEO" };
 
   function createTask(kind, delegate) {
     const baseOptions = { modelAssetPath: MODELS[kind], delegate };
@@ -150,14 +148,6 @@ export function start(effect) {
         minHandDetectionConfidence: 0.3,
         minHandPresenceConfidence: 0.3,
         minTrackingConfidence: 0.3,
-      });
-    }
-    // 사람과 배경을 가르는 그림 한 장만 있으면 된다
-    if (kind === "seg") {
-      return ImageSegmenter.createFromOptions(vision, {
-        baseOptions, runningMode,
-        outputCategoryMask: true,
-        outputConfidenceMasks: false,
       });
     }
     return FaceLandmarker.createFromOptions(vision, {
@@ -202,31 +192,12 @@ export function start(effect) {
       .finally(() => { rebuilding[kind] = false; });
   }
 
-  /** 세그멘테이션 결과에서 마스크만 베껴 온다.
-   *
-   *  마스크는 GPU 텍스처를 물고 있어 프레임 너머로 들고 있을 수 없다.
-   *  받은 자리에서 숫자만 복사하고 곧바로 놓아준다. */
-  function maskOf(out) {
-    const m = out?.categoryMask;
-    const data = m ? m.getAsUint8Array().slice() : null;
-    const res = data ? { data, w: m.width, h: m.height } : null;
-    out?.close?.();
-    return res;
-  }
-
   /** 추론 실행 — 실패하면 복구를 걸고 null을 돌려준다 */
   function runDetect(kind, task, ts) {
     try {
-      let res;
-      if (kind === "seg") {
-        res = maskOf(runMode.seg === "IMAGE"
-          ? task.segment(video)
-          : task.segmentForVideo(video, ts));
-      } else {
-        res = runMode[kind] === "IMAGE"
-          ? task.detect(video)
-          : task.detectForVideo(video, ts);
-      }
+      const res = runMode[kind] === "IMAGE"
+        ? task.detect(video)
+        : task.detectForVideo(video, ts);
       failures[kind] = 0;
       return res;
     } catch (err) {
@@ -358,7 +329,7 @@ export function start(effect) {
   // 캔버스는 아직 내려받지 않은 글꼴을 조용히 건너뛰고 다른 글꼴로 그린다.
   // 화면에 쓸 글자를 미리 달라고 해 두면 첫 프레임부터 제 글꼴로 나온다.
   try {
-    document.fonts?.load('600 40px "Pretendard Variable"', "편집자는 커피로 움직입니다! 주먹을 쥐세요 KNOCK 도레미파솔라시 메모리 부족 무시 리포트 다시 열기 예기치 않게 종료되었습니다 저장하지 않은 변경 사항은 복구할 수 없습니다");
+    document.fonts?.load('600 40px "Pretendard Variable"', "편집자는 커피로 움직입니다! 주먹을 쥐세요 KNOCK 도레미파솔라시 무시 리포트 다시 열기 예기치 않게 종료되었습니다 저장하지 않은 변경사항은 복구할 수 없습니다");
   } catch { /* 글꼴을 못 불러와도 기본 글꼴로 나온다 */ }
 
   // GPU/CPU 전환 — 만들어 둔 추론기를 모두 버리고 다시 만든다
@@ -445,8 +416,8 @@ export function start(effect) {
 
       // 모델별로 추론하고 결과를 캐싱한다. 실패해도 직전 결과를 유지해 화면이 흔들리지 않는다.
       //
-      // 모델을 셋씩 쓰는 작품은 매 프레임 다 돌리면 손까지 느려진다. stride가 2면
-      // 한 프레임 걸러 추론하고 사이에는 직전 결과를 쓴다 — 얼굴과 몸은 그 사이에
+      // 모델을 둘씩 쓰는 작품은 매 프레임 다 돌리면 손까지 느려진다. stride가 2면
+      // 한 프레임 걸러 추론하고 사이에는 직전 결과를 쓴다 — 얼굴은 그 사이에
       // 얼마 움직이지 않아 티가 나지 않는다.
       const detectOf = (kind, stride = 1) => {
         if (frameReady && (fresh || !lastResults[kind])) {
@@ -468,9 +439,8 @@ export function start(effect) {
         } else if (effect === "juggle") {
           const hands = detectOf(MAIN);
           const face = detectOf("face", 2);
-          const mask = detectOf("seg", 2);
           reportDetection(hands.landmarks?.length ?? 0, "손");
-          juggle.draw(ctx, video, W, H, hands, face, mask, ts);
+          juggle.draw(ctx, video, W, H, hands, face, ts);
         } else if (effect === "pray") {
           const hands = detectOf(MAIN);
           reportDetection(hands.landmarks?.length ?? 0, "손");

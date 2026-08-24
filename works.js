@@ -30,7 +30,7 @@ export const WORKS = {
     icon: "🤹",
     page: "juggle.html",
     tag: "손바닥으로 어도비를 튕겨 올립니다",
-    tasks: ["hand", "face", "seg"],   // 분장에 얼굴, 배경을 오려내는 데 세그멘테이션이 필요하다
+    tasks: ["hand", "face"],   // 고깔을 머리에 앉히는 데 얼굴이 필요하다
   },
   coffee: {
     name: "커피콩 받기",

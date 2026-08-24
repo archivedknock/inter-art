@@ -1,24 +1,17 @@
 // 삐에로 저글링 — 어도비 여섯 개를 손바닥으로 튕겨 올린다.
 //
 // 하나라도 떨어뜨리면 전부 강제 종료되고 처음부터 다시 시작한다.
-// 배경은 인물만 오려내 별밭 위에 세운다.
 //
 // 계산과 그리기는 화면 좌표(미러 해제)에서 한다. 아이콘의 두 글자가 뒤집히면
 // 무슨 프로그램인지 알 수 없기 때문이다. 손·얼굴 좌표는 들여올 때 한 번만 뒤집는다.
 
 import { ac, fxOut } from "./audio.js";
-import { sx, sy, len, base } from "./view.js";
+import { sx, sy, len } from "./view.js";
 
 const FONT = `"Pretendard Variable", "Pretendard", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
-
-/** 자리마다 늘 같은 값을 내는 난수 — 화면 크기가 바뀌어도 별밭이 뒤바뀌지 않는다 */
-const frac = (n) => {
-  const v = Math.sin(n) * 43758.5453;
-  return v - Math.floor(v);
-};
 
 /* ── 어도비 ──────────────────────────────────────────── */
 
@@ -33,10 +26,7 @@ const APPS = [
   { id: "Lr", name: "Adobe Lightroom",     bg: "#001e36", fg: "#31a8ff", note: 880.00 },
 ];
 
-const SKY = "#2a3ddb";
-const STAR = "#efe6d4";
-
-// 고깔 — 파란 별밭에서 묻히지 않게 따뜻한 쪽으로 잡는다.
+// 고깔 — 카메라 화면 위에서 묻히지 않게 따뜻한 쪽으로 잡는다.
 // 몸통이 밝고 챙이 그보다 진하며, 점과 방울만 밝게 튄다.
 const HAT_BODY = "#ffd45e";
 const HAT_TRIM = "#e0392b";
@@ -190,17 +180,6 @@ function fitText(ctx, text, x, y, maxW, size, weight) {
   ctx.fillText(text, x, y);
 }
 
-function starPath(ctx, x, y, r, rot) {
-  ctx.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const a = rot - Math.PI / 2 + (i * Math.PI) / 5;
-    const rr = i % 2 ? r * 0.45 : r;
-    const px = x + Math.cos(a) * rr, py = y + Math.sin(a) * rr;
-    i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-  }
-  ctx.closePath();
-}
-
 /** 어도비 아이콘 — 동그란 공에 두 글자.
  *
  *  한 바퀴 돌리지 않고 좌우로만 흔들린다. 뒤집히면 무슨 프로그램인지 읽을 수
@@ -310,7 +289,7 @@ function drawAlert(ctx, W, H, a, t) {
   ctx.save();
   ctx.globalAlpha = k;
 
-  // 별밭 위에 그대로 얹으면 글자가 읽히지 않는다. 뒤를 흐린 뒤 창을 올린다.
+  // 어수선한 화면 위에 그대로 얹으면 글자가 읽히지 않는다. 뒤를 흐린 뒤 창을 올린다.
   // 캔버스를 조금 키워 그려야 흐림이 가장자리 바깥의 빈자리를 물어 오지 않는다.
   const over = H * 0.03;
   ctx.filter = `blur(${Math.round(H * 0.022)}px)`;
@@ -481,96 +460,15 @@ export class JuggleShow {
     if (this.alert && t - this.alert.at > ALERT_MS) this.alert = null;
   }
 
-  /** 별밭 — 움직이지 않으므로 한 번만 그려 두고 그림째 붙인다 */
-  sky(W, H) {
-    if (this.skyCv?.width === W && this.skyCv?.height === H) return this.skyCv;
 
-    const cv = document.createElement("canvas");
-    cv.width = W;
-    cv.height = H;
-    const c = cv.getContext("2d");
-    c.fillStyle = SKY;
-    c.fillRect(0, 0, W, H);
-    c.fillStyle = STAR;
 
-    const r = Math.min(W, H) * 0.045;
-    const gx = r * 3.5, gy = r * 3.2;
-    this.twinkles = [];
-    for (let row = -1; row * gy < H + gy; row++) {
-      for (let col = -1; col * gx < W + gx; col++) {
-        const j = frac(col * 12.9898 + row * 78.233);
-        const x = col * gx + (row % 2 ? gx / 2 : 0) + (j - 0.5) * r * 0.5;
-        const y = row * gy + (frac(j * 7.13) - 0.5) * r * 0.4;
-        const rr = r * (0.82 + j * 0.3);
-        starPath(c, x, y, rr, (j - 0.5) * 0.9);
-        c.fill();
-        if (j > 0.93) this.twinkles.push({ x, y, r: rr, phase: j * 40 });
-      }
-    }
-
-    this.skyCv = cv;
-    return cv;
-  }
-
-  /** 영상에서 사람만 오려낸다 — 마스크는 작은 흑백 그림 한 장이다 */
-  person(video, W, H, mask) {
-    if (!mask?.data) return null;
-
-    if (this.maskCv?.width !== mask.w || this.maskCv?.height !== mask.h) {
-      this.maskCv = document.createElement("canvas");
-      this.maskCv.width = mask.w;
-      this.maskCv.height = mask.h;
-      this.maskCtx = this.maskCv.getContext("2d");
-      this.maskImg = this.maskCtx.createImageData(mask.w, mask.h);
-    }
-
-    // 이 모델은 갈래 이름을 selfie 하나만 두고, 사람을 0으로 배경을 255로 내놓는다.
-    // 헷갈리기 쉬운 자리다 — 뒤집으면 사람이 지워지고 배경만 남는다.
-    const px = this.maskImg.data;
-    for (let i = 0, j = 3; i < mask.data.length; i++, j += 4) {
-      px[j] = mask.data[i] ? 0 : 255;
-    }
-    this.maskCtx.putImageData(this.maskImg, 0, 0);
-
-    if (this.cutCv?.width !== W || this.cutCv?.height !== H) {
-      this.cutCv = document.createElement("canvas");
-      this.cutCv.width = W;
-      this.cutCv.height = H;
-      this.cutCtx = this.cutCv.getContext("2d");
-    }
-
-    const c = this.cutCtx;
-    c.clearRect(0, 0, W, H);
-    c.drawImage(video, 0, 0, W, H);
-    // 마스크가 작아 그대로 키우면 가장자리가 각진다. 한 번 풀어 준다.
-    c.globalCompositeOperation = "destination-in";
-    c.filter = `blur(${Math.max(1, W / 260)}px)`;
-    c.drawImage(this.maskCv, 0, 0, W, H);
-    c.filter = "none";
-    c.globalCompositeOperation = "source-over";
-    return this.cutCv;
-  }
-
-  draw(ctx, video, W, H, handResult, faceResult, mask, t) {
+  draw(ctx, video, W, H, handResult, faceResult, t) {
     const dt = Math.min(64, this.last ? t - this.last : 16);
     this.last = t;
 
-    const cut = this.person(video, W, H, mask);
+    ctx.drawImage(video, 0, 0, W, H);
 
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    if (cut) {
-      ctx.drawImage(this.sky(W, H), 0, 0);
-      for (const s of this.twinkles) {
-        ctx.fillStyle = `rgba(255,255,255,${0.25 + 0.35 * Math.sin(t / 700 + s.phase) ** 2})`;
-        starPath(ctx, s.x, s.y, s.r * 0.5, t / 3000 + s.phase);
-        ctx.fill();
-      }
-    }
-
-    // 오려낸 사람은 영상과 같은 자리에 놓이므로 미러를 도로 걸고 얹는다.
-    // 마스크가 아직 없으면(모델을 부르는 중) 영상을 그대로 둔다.
-    base(ctx, W, H);
-    ctx.drawImage(cut ?? video, 0, 0, W, H);
+    // 이후로는 미러를 풀고 화면 좌표에서 그린다 (아이콘의 글자가 뒤집히지 않도록)
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     // 손 순서는 프레임마다 바뀔 수 있다. 가까운 쪽끼리 이어 붙여야 속도가 튀지 않는다.

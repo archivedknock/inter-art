@@ -36,7 +36,7 @@
 <tr>
 <td width="60" align="center">🤹</td>
 <td><b>삐에로 저글링</b> · <code>/juggle.html</code><br>
-배경이 별밭으로 바뀌고 머리에 고깔이 얹힙니다. 어도비 아이콘이 아래에서 떠오릅니다.<br>
+머리에 삐에로 고깔이 얹히고, 어도비 아이콘이 화면 아래에서 떠오릅니다.<br>
 <b>손바닥으로 튕겨</b> 올립니다. 공 하나당 세 번씩 받아내면 프로그램이 하나씩 늘어 여섯 개까지 갑니다.<br>
 하나라도 떨어뜨리면 <b>전부 강제 종료</b>되고 Ps 하나부터 다시 시작합니다.</td>
 </tr>
@@ -85,7 +85,7 @@
 
 ## 🛠️ 기술 구성
 
-- **[MediaPipe Tasks Vision](https://ai.google.dev/edge/mediapipe/solutions/vision) 1.0.1** — `HandLandmarker`, `FaceLandmarker`, `ImageSegmenter` (CDN에서 ESM으로 로드)
+- **[MediaPipe Tasks Vision](https://ai.google.dev/edge/mediapipe/solutions/vision) 1.0.1** — `HandLandmarker`, `FaceLandmarker` (CDN에서 ESM으로 로드)
 - **브라우저 표준 API** — `getUserMedia`, Canvas 2D, `canvas.captureStream()`, `MediaRecorder`, Web Audio
 - 프레임워크 및 번들러를 사용하지 않으며, 별도의 서버를 요구하지 않습니다.
 
@@ -97,13 +97,13 @@
 | 🧱 `ui.js` | 작품 화면 구성 (무대·툴바) |
 | ⚙️ `app.js` | 웹캠 제어, 모델 로딩, 렌더 루프, 녹화 및 저장 |
 | 🙏 `pray.js` | 렌더링 성공 기도하기 (합장 판정, 인코딩 창, 결과 창) |
-| 🤹 `juggle.js` | 삐에로 저글링 (손바닥 판정, 별밭 배경, 인물 오려내기, 고깔) |
+| 🤹 `juggle.js` | 삐에로 저글링 (손바닥 판정, 공 물리, 고깔, 강제 종료 알림) |
 | 🔭 `view.js` | 미러링과 화면 배율을 한곳에서 관리 |
 | 🔊 `audio.js` | 효과음 출력과 녹화용 오디오 합성 |
 | 🎨 `style.css` | 작품 화면 스타일 |
 
 작품마다 페이지가 하나씩 있으며, 화면 구성은 `ui.js`가 한 번만 만들어 페이지마다 같은
-마크업을 두지 않습니다. 인식 모델(손 7.8MB, 얼굴 3.7MB, 인물 오려내기 0.25MB)은 작품이 쓰는 것만, 처음 실행할 때만 내려받습니다.
+마크업을 두지 않습니다. 인식 모델(손 7.8MB, 얼굴 3.7MB)은 작품이 쓰는 것만, 처음 실행할 때만 내려받습니다.
 
 준비 중인 작품의 파일(`save.*` `undo.*` `coffee.*`)도 저장소에 함께 있습니다. 공개할 때
 `works.js`에 항목을 되살리고 `app.js`에서 불러오면 됩니다.
