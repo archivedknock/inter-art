@@ -212,7 +212,7 @@ function drawIcon(ctx, b, t, alpha = 1) {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(b.x, b.y);
-  ctx.rotate(Math.sin(t / 280 + b.phase) * 0.42);
+  ctx.rotate(Math.sin(t / 420 + b.phase) * 0.42);
 
   ctx.shadowColor = "rgba(0,0,0,0.45)";
   ctx.shadowBlur = r * 0.36;
@@ -376,7 +376,7 @@ function drawAlert(ctx, W, H, a, t) {
 
 /* ── 작품 ────────────────────────────────────────────── */
 
-const GRAV = 0.8;           // 중력 (화면 높이의 몇 배인가 / 초²)
+const GRAV = 0.45;          // 중력 (화면 높이의 몇 배인가 / 초²)
 const APEX = 0.5;           // 튕겼을 때 올라가는 높이 (화면 높이 배수)
 const HIT_MS = 260;         // 같은 아이콘을 다시 튕기기까지
 const ADD_EVERY = 3;        // 띄운 프로그램 하나당 몇 번 튕겨야 다음이 실행되는가
@@ -462,8 +462,8 @@ export class JuggleShow {
           const boost = clamp(-p.vy / H, 0, 1);
           b.vy = -Math.min(v0 * (1 + boost * 0.3), vmax);
           b.vx = clamp(
-            b.vx * 0.3 + ((b.x - p.x) / p.r) * W * 0.16 + p.vx * 0.25,
-            -W * 0.35, W * 0.35
+            b.vx * 0.3 + ((b.x - p.x) / p.r) * W * 0.12 + p.vx * 0.18,
+            -W * 0.22, W * 0.22
           );
           b.hitAt = t;
           pop(APPS[b.app].note);
