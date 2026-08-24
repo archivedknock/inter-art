@@ -379,7 +379,7 @@ function drawAlert(ctx, W, H, a, t) {
 const GRAV = 1.15;          // 중력 (화면 높이의 몇 배인가 / 초²)
 const APEX = 0.5;           // 튕겼을 때 올라가는 높이 (화면 높이 배수)
 const HIT_MS = 260;         // 같은 아이콘을 다시 튕기기까지
-const ADD_EVERY = 8;        // 몇 번 튕기면 다음 프로그램이 실행되는가
+const ADD_EVERY = 3;        // 띄운 프로그램 하나당 몇 번 튕겨야 다음이 실행되는가
 const RELAUNCH_MS = 2400;   // 알림이 떠 있는 시간 = 다시 실행되기까지
 
 export class JuggleShow {
@@ -391,7 +391,7 @@ export class JuggleShow {
     this.balls = [];
     this.down = [];      // 종료돼 다시 실행되기를 기다리는 프로그램
     this.opened = 0;     // 지금까지 실행한 프로그램 수
-    this.hits = 0;
+    this.toNext = 0;     // 다음 프로그램까지 남은 횟수 (첫 실행 때 채워진다)
     this.alert = null;
     this.palms = [];
     this.face = null;
@@ -417,6 +417,10 @@ export class JuggleShow {
     if (this.opened >= APPS.length) return;
     this.spawn(this.opened, W, H, t);
     this.opened++;
+    // 다음까지 필요한 횟수를 띄운 개수에 비례해 둔다. 공이 늘면 그만큼 자주
+    // 튕기게 되므로, 이래야 어느 단계든 "각 공을 세 번씩 받아내면 하나 는다"가
+    // 되고 걸리는 시간도 비슷해진다. 합계로 세면 첫 하나가 유독 길어진다.
+    this.toNext = ADD_EVERY * this.opened;
     launch();
   }
 
@@ -458,9 +462,8 @@ export class JuggleShow {
             -W * 0.35, W * 0.35
           );
           b.hitAt = t;
-          this.hits++;
           pop(APPS[b.app].note);
-          if (this.hits % ADD_EVERY === 0) this.launchNext(W, H, t);
+          if (this.toNext > 0 && --this.toNext === 0) this.launchNext(W, H, t);
           break;
         }
       }
