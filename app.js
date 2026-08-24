@@ -438,7 +438,9 @@ export function start(effect) {
           coffee.draw(ctx, video, W, H, hands, face, FaceLandmarker, ts);
         } else if (effect === "juggle") {
           const hands = detectOf(MAIN);
-          const face = detectOf("face", 2);
+          // 고깔은 머리를 따라가기만 하면 되므로 손보다 훨씬 뜸해도 된다.
+          // 얼굴에 쓰는 시간을 줄여 손 인식이 도는 횟수를 늘린다.
+          const face = detectOf("face", 3);
           reportDetection(hands.landmarks?.length ?? 0, "손");
           juggle.draw(ctx, video, W, H, hands, face, ts);
         } else if (effect === "pray") {

@@ -6,7 +6,7 @@
 // 무슨 프로그램인지 알 수 없기 때문이다. 손·얼굴 좌표는 들여올 때 한 번만 뒤집는다.
 
 import { ac, fxOut } from "./audio.js";
-import { sx, sy, len } from "./view.js";
+import { sx, sy } from "./view.js";
 
 const FONT = `"Pretendard Variable", "Pretendard", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
 
@@ -109,18 +109,39 @@ function crash() {
   } catch { /* 무시 */ }
 }
 
-/* ── 손바닥 ──────────────────────────────────────────── */
+/* ── 손 ──────────────────────────────────────────────── */
 
-const PALM = [0, 5, 9, 13, 17];
-
-/** 손바닥 자리와 크기 (화면 좌표) */
-function palmsOf(handResult, W, H) {
+/** 손이 차지한 자리 — 스물한 점을 모두 감싸는 원 (화면 좌표)
+ *
+ *  손바닥 한가운데만 쓰면 손을 세워 받을 때 판정이 손 뒤에 남는다. 공을
+ *  받으려고 손을 들면 카메라에 보이는 것은 손바닥이 아니라 손날과 손가락
+ *  끝이기 때문이다. 보이는 대로 감싸면 손을 어느 쪽으로 들든 눈에 보이는
+ *  자리에서 맞는다.
+ *
+ *  크기도 저절로 맞아떨어진다 — 손바닥을 펴 보이면 원이 커지고, 세워서
+ *  손날만 보이면 작아진다. 화면에 보이는 만큼이 곧 받는 넓이다. */
+function handsOf(handResult, W, H) {
   const out = [];
   for (const lm of (handResult?.landmarks ?? []).slice(0, 2)) {
+    const pts = [];
     let cx = 0, cy = 0;
-    for (const i of PALM) { cx += sx(lm[i].x * W, W); cy += sy(lm[i].y * H, H); }
-    const size = len(Math.hypot((lm[9].x - lm[0].x) * W, (lm[9].y - lm[0].y) * H));
-    out.push({ x: cx / PALM.length, y: cy / PALM.length, r: size * 0.75, vx: 0, vy: 0 });
+    for (const p of lm) {
+      const x = sx(p.x * W, W), y = sy(p.y * H, H);
+      pts.push(x, y);
+      cx += x;
+      cy += y;
+    }
+    cx /= lm.length;
+    cy /= lm.length;
+
+    let r = 0;
+    for (let i = 0; i < pts.length; i += 2) {
+      const d = Math.hypot(pts[i] - cx, pts[i + 1] - cy);
+      if (d > r) r = d;
+    }
+    if (!r) continue;
+
+    out.push({ x: cx, y: cy, r: r * 1.05, vx: 0, vy: 0 });
   }
   return out;
 }
@@ -360,6 +381,7 @@ const APEX = 0.5;           // 튕겼을 때 올라가는 높이 (화면 높이 
 const HIT_MS = 260;         // 같은 아이콘을 다시 튕기기까지
 const ADD_EVERY = 3;        // 띄운 프로그램 하나당 몇 번 튕겨야 다음이 실행되는가
 const ALERT_MS = 2400;      // 알림이 떠 있는 시간 = 처음부터 다시 시작하기까지
+const HAND_GRACE_MS = 300;  // 인식이 끊긴 손을 마지막 자리에 붙잡아 두는 시간
 
 export class JuggleShow {
   constructor() {
@@ -371,7 +393,7 @@ export class JuggleShow {
     this.opened = 0;     // 지금까지 실행한 프로그램 수
     this.toNext = 0;     // 다음 프로그램까지 남은 횟수 (첫 실행 때 채워진다)
     this.alert = null;
-    this.palms = [];
+    this.hands = [];
     this.face = null;
     this.faceAt = 0;
     this.last = 0;
@@ -412,6 +434,47 @@ export class JuggleShow {
     crash();
   }
 
+  /** 손바닥 자리를 프레임 너머로 이어 붙인다.
+   *
+   *  두 손을 든 채로도 인식은 한두 프레임씩 끊긴다 — 인식 배지가 1과 2를
+   *  오간다. 놓친 손을 곧바로 지우면 그 손으로는 공을 칠 수 없어 한 손만
+   *  되는 것처럼 느껴진다. 잠깐은 마지막 자리에 붙잡아 둔다.
+   *
+   *  손 순서도 프레임마다 바뀌므로 가까운 쪽끼리 이어야 속도가 튀지 않는다. */
+  trackHands(handResult, W, H, dt, t) {
+    const kept = [];
+
+    for (const p of handsOf(handResult, W, H)) {
+      let near = null, best = p.r * 2.5;
+      for (const q of this.hands) {
+        if (q.taken) continue;
+        const d = Math.hypot(p.x - q.x, p.y - q.y);
+        if (d < best) { best = d; near = q; }
+      }
+      if (near) {
+        near.taken = true;
+        if (dt > 0) {
+          p.vx = ((p.x - near.x) * 1000) / dt;
+          p.vy = ((p.y - near.y) * 1000) / dt;
+        }
+      }
+      p.seen = t;
+      kept.push(p);
+    }
+
+    // 이번에 못 찾은 손은 잠깐 마지막 자리에 남겨 둔다. 다만 움직임은 지운다 —
+    // 보이지도 않는 손이 공을 세게 채 올리면 어디서 맞았는지 알 수 없다.
+    for (const q of this.hands) {
+      if (q.taken || kept.length >= 2 || t - q.seen > HAND_GRACE_MS) continue;
+      q.vx = 0;
+      q.vy = 0;
+      kept.push(q);
+    }
+
+    for (const p of kept) p.taken = false;
+    this.hands = kept;
+  }
+
   update(dt, W, H, t) {
     const sec = dt / 1000;
     const g = GRAV * H;
@@ -435,7 +498,7 @@ export class JuggleShow {
       // 떨어지는 중일 때만 친다. 올라가는 것도 치면 손을 대고 있는 것만으로
       // 계속 떠 있게 되어 저글링이 되지 않는다.
       if (b.vy > 0 && t - b.hitAt > HIT_MS) {
-        for (const p of this.palms) {
+        for (const p of this.hands) {
           if (Math.hypot(b.x - p.x, b.y - p.y) > p.r + b.r) continue;
           // 손을 위로 채면 조금 더 뜬다. 다만 화면 밖으로 나갈 만큼은 아니다.
           const boost = clamp(-p.vy / H, 0, 1);
@@ -471,21 +534,7 @@ export class JuggleShow {
     // 이후로는 미러를 풀고 화면 좌표에서 그린다 (아이콘의 글자가 뒤집히지 않도록)
     ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    // 손 순서는 프레임마다 바뀔 수 있다. 가까운 쪽끼리 이어 붙여야 속도가 튀지 않는다.
-    const palms = palmsOf(handResult, W, H);
-    for (const p of palms) {
-      let near = null, best = p.r * 2.5;
-      for (const q of this.palms) {
-        const d = Math.hypot(p.x - q.x, p.y - q.y);
-        if (d < best) { best = d; near = q; }
-      }
-      if (near && dt > 0) {
-        p.vx = ((p.x - near.x) * 1000) / dt;
-        p.vy = ((p.y - near.y) * 1000) / dt;
-      }
-    }
-    this.palms = palms;
-
+    this.trackHands(handResult, W, H, dt, t);
     this.update(dt, W, H, t);
 
     // 얼굴을 한두 프레임 놓쳐도 고깔이 깜빡이지 않게 붙잡아 둔다
