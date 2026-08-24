@@ -135,10 +135,10 @@ function palmsOf(handResult, W, H) {
   return out;
 }
 
-/* ── 얼굴 → 분장 자리 ────────────────────────────────── */
+/* ── 얼굴 → 고깔 자리 ────────────────────────────────── */
 
-/** 코·볼·이마와 얼굴 기울기 (화면 좌표) */
-function clownOf(faceResult, W, H) {
+/** 고깔이 앉을 자리와 얼굴 기울기 (화면 좌표) */
+function hatOf(faceResult, W, H) {
   const lm = faceResult?.faceLandmarks?.[0];
   if (!lm) return null;
   const P = (i) => ({ x: sx(lm[i].x * W, W), y: sy(lm[i].y * H, H) });
@@ -163,7 +163,7 @@ function clownOf(faceResult, W, H) {
     y: chin.y + (top.y - chin.y) * 1.36,
   };
 
-  return { nose: P(1), cheeks: [P(50), P(280)], crown, width, ang };
+  return { crown, width, ang };
 }
 
 /* ── 그리기 ──────────────────────────────────────────── */
@@ -244,26 +244,10 @@ function blobPath(ctx, circles) {
   }
 }
 
-/** 빨간 코, 볼터치, 고깔 */
-function drawClown(ctx, f) {
+/** 고깔 — 챙을 머리 폭에 맞춘다. 얼굴 폭(광대~광대)은 머리카락까지 친
+ *  머리 폭의 3분의 2쯤이라, 그대로 쓰면 모자가 머리에 얹히지 않고 올라앉는다. */
+function drawHat(ctx, f) {
   const w = f.width;
-  ctx.save();
-
-  // 볼터치 — 가장자리가 보이면 붙여 놓은 색종이가 된다. 가운데만 옅게 물들인다.
-  for (const c of f.cheeks) {
-    const cr = w * 0.14;
-    const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, cr);
-    g.addColorStop(0, "rgba(255,112,132,0.34)");
-    g.addColorStop(0.45, "rgba(255,124,142,0.18)");
-    g.addColorStop(1, "rgba(255,140,152,0)");
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.ellipse(c.x, c.y, cr, cr * 0.82, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // 고깔 — 챙을 머리 폭에 맞춘다. 얼굴 폭(광대~광대)은 머리카락까지 친
-  // 머리 폭의 3분의 2쯤이라, 그대로 쓰면 모자가 머리에 얹히지 않고 올라앉는다.
   ctx.save();
   ctx.translate(f.crown.x, f.crown.y);
   ctx.rotate(f.ang);
@@ -313,26 +297,6 @@ function drawClown(ctx, f) {
       [dx * fr * 0.6, fy + dy * fr * 0.6, fr * 0.6]),
   ]);
   ctx.fill();
-  ctx.restore();
-
-  // 빨간 코
-  const nr = w * 0.155;
-  const g = ctx.createRadialGradient(
-    f.nose.x - nr * 0.3, f.nose.y - nr * 0.35, nr * 0.1,
-    f.nose.x, f.nose.y, nr
-  );
-  g.addColorStop(0, "#ff7d6d");
-  g.addColorStop(0.55, "#e8291b");
-  g.addColorStop(1, "#a8140c");
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.arc(f.nose.x, f.nose.y, nr, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "rgba(255,255,255,0.5)";
-  ctx.beginPath();
-  ctx.ellipse(f.nose.x - nr * 0.3, f.nose.y - nr * 0.38, nr * 0.26, nr * 0.19, -0.5, 0, Math.PI * 2);
-  ctx.fill();
-
   ctx.restore();
 }
 
@@ -619,8 +583,8 @@ export class JuggleShow {
 
     this.update(dt, W, H, t);
 
-    // 얼굴을 한두 프레임 놓쳐도 분장이 깜빡이지 않게 붙잡아 둔다
-    const face = clownOf(faceResult, W, H);
+    // 얼굴을 한두 프레임 놓쳐도 고깔이 깜빡이지 않게 붙잡아 둔다
+    const face = hatOf(faceResult, W, H);
     if (face) {
       this.face = face;
       this.faceAt = t;
@@ -628,7 +592,7 @@ export class JuggleShow {
       this.face = null;
     }
 
-    if (this.face) drawClown(ctx, this.face);
+    if (this.face) drawHat(ctx, this.face);
     for (const b of this.balls) drawIcon(ctx, b, t);
     if (this.alert) drawAlert(ctx, W, H, this.alert, t);
   }
