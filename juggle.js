@@ -1,6 +1,6 @@
 // 삐에로 저글링 — 어도비 여섯 개를 손바닥으로 튕겨 올린다.
 //
-// 떨어뜨린 프로그램은 강제 종료된다. 잠시 뒤 다시 실행되므로 끝은 없다.
+// 하나라도 떨어뜨리면 전부 강제 종료되고 처음부터 다시 시작한다.
 // 배경은 인물만 오려내 별밭 위에 세운다.
 //
 // 계산과 그리기는 화면 좌표(미러 해제)에서 한다. 아이콘의 두 글자가 뒤집히면
@@ -376,11 +376,11 @@ function drawAlert(ctx, W, H, a, t) {
 
 /* ── 작품 ────────────────────────────────────────────── */
 
-const GRAV = 1.15;          // 중력 (화면 높이의 몇 배인가 / 초²)
+const GRAV = 0.8;           // 중력 (화면 높이의 몇 배인가 / 초²)
 const APEX = 0.5;           // 튕겼을 때 올라가는 높이 (화면 높이 배수)
 const HIT_MS = 260;         // 같은 아이콘을 다시 튕기기까지
 const ADD_EVERY = 3;        // 띄운 프로그램 하나당 몇 번 튕겨야 다음이 실행되는가
-const RELAUNCH_MS = 2400;   // 알림이 떠 있는 시간 = 다시 실행되기까지
+const ALERT_MS = 2400;      // 알림이 떠 있는 시간 = 처음부터 다시 시작하기까지
 
 export class JuggleShow {
   constructor() {
@@ -389,7 +389,6 @@ export class JuggleShow {
 
   reset() {
     this.balls = [];
-    this.down = [];      // 종료돼 다시 실행되기를 기다리는 프로그램
     this.opened = 0;     // 지금까지 실행한 프로그램 수
     this.toNext = 0;     // 다음 프로그램까지 남은 횟수 (첫 실행 때 채워진다)
     this.alert = null;
@@ -424,8 +423,12 @@ export class JuggleShow {
     launch();
   }
 
+  /** 하나라도 놓치면 전부 강제 종료되고 처음부터 다시 시작한다 */
   quit(app, t) {
-    this.down.push({ app, at: t });
+    // 배열을 갈아 끼우지 않고 비운다. 부딪힘을 훑던 반복문이 같은 배열을 보고 있다.
+    this.balls.length = 0;
+    this.opened = 0;
+    this.toNext = 0;
     this.alert = { app, at: t };
     crash();
   }
@@ -436,8 +439,9 @@ export class JuggleShow {
     const v0 = Math.sqrt(2 * g * APEX * H);
     const vmax = Math.sqrt(2 * g * 0.72 * H);
 
-    // 첫 프로그램은 카메라가 켜지면 알아서 실행된다
-    if (!this.opened) this.launchNext(W, H, t);
+    // 첫 프로그램은 카메라가 켜지면 알아서 실행된다.
+    // 놓쳐서 다시 시작하는 길이면 알림이 닫히기를 기다린다.
+    if (!this.opened && !this.alert) this.launchNext(W, H, t);
 
     for (let i = this.balls.length - 1; i >= 0; i--) {
       const b = this.balls[i];
@@ -469,18 +473,12 @@ export class JuggleShow {
       }
 
       if (b.y - b.r > H) {
-        this.balls.splice(i, 1);
         this.quit(b.app, t);
+        break;   // 전부 치웠으므로 남은 공을 볼 것도 없다
       }
     }
 
-    // 종료된 프로그램은 알림이 닫히면 다시 실행된다
-    for (let i = this.down.length - 1; i >= 0; i--) {
-      if (t - this.down[i].at < RELAUNCH_MS) continue;
-      this.spawn(this.down.splice(i, 1)[0].app, W, H, t);
-    }
-
-    if (this.alert && t - this.alert.at > RELAUNCH_MS) this.alert = null;
+    if (this.alert && t - this.alert.at > ALERT_MS) this.alert = null;
   }
 
   /** 별밭 — 움직이지 않으므로 한 번만 그려 두고 그림째 붙인다 */
