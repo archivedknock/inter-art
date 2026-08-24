@@ -159,8 +159,8 @@ function clownOf(faceResult, W, H) {
   //
   // 축을 쓰면 고개를 돌려 이마 점이 한쪽으로 밀려도 모자가 머리 가운데에 남는다.
   const crown = {
-    x: chin.x + (top.x - chin.x) * 1.44,
-    y: chin.y + (top.y - chin.y) * 1.44,
+    x: chin.x + (top.x - chin.x) * 1.36,
+    y: chin.y + (top.y - chin.y) * 1.36,
   };
 
   return { nose: P(1), cheeks: [P(50), P(280)], crown, width, ang };
@@ -268,9 +268,9 @@ function drawClown(ctx, f) {
   ctx.translate(f.crown.x, f.crown.y);
   ctx.rotate(f.ang);
 
-  const brimW = w * 1.45;
+  const brimW = w * 1.36;
   const bw = brimW * 0.8, bh = w * 1.05, foot = 0;
-  const brimR = brimW / 8;
+  const brimR = brimW / 9;
 
   ctx.shadowColor = "rgba(0,0,0,0.35)";
   ctx.shadowBlur = w * 0.06;
@@ -285,8 +285,8 @@ function drawClown(ctx, f) {
   ctx.fillStyle = HAT_BODY;
   ctx.fill();
 
-  // 구름처럼 봉우리진 챙
-  const bandY = foot - brimR * 0.5;
+  // 구름처럼 봉우리진 챙 — 밑동보다 아래로 걸쳐야 머리에 얹힌 것으로 보인다
+  const bandY = foot - brimR * 0.25;
   blobPath(ctx, [
     ...[0, 1, 2, 3].map((i) => [-brimW / 2 + (brimW / 4) * (i + 0.5), bandY, brimR]),
   ]);
@@ -299,9 +299,10 @@ function drawClown(ctx, f) {
   ctx.shadowOffsetY = 0;
 
   // 몸통의 점 두 개와 꼭대기의 꽃 방울
-  const dr = bw * 0.1;
+  // 점 둘은 서로 떨어져 있어야 한다. 붙으면 땅콩 하나로 보인다.
+  const dr = bw * 0.085;
   ctx.fillStyle = HAT_DOT;
-  blobPath(ctx, [[0, foot - bh * 0.4, dr], [0, foot - bh * 0.6, dr]]);
+  blobPath(ctx, [[0, foot - bh * 0.34, dr], [0, foot - bh * 0.6, dr]]);
   ctx.fill();
 
   const fr = bw * 0.17;
