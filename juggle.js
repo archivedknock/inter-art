@@ -151,7 +151,19 @@ function clownOf(faceResult, W, H) {
   // 고개를 기울이면 고깔도 함께 기운다.
   const ang = Math.atan2(top.y - chin.y, top.x - chin.x) + Math.PI / 2;
 
-  return { nose: P(1), cheeks: [P(50), P(280)], top, width, ang };
+  // 고깔이 앉을 자리 — 턱에서 이마로 이어지는 얼굴 축을 그대로 위로 늘린다.
+  //
+  // 이마 점(10)은 머리카락 아래라 거기 얹으면 모자가 이마를 덮는다. 이마에서
+  // 턱까지가 머리 전체 높이의 3분의 2쯤이므로 그 절반만큼 더 올라가면 정수리다.
+  // 머리카락에 조금 파묻히도록 거기서 살짝 내려 잡는다.
+  //
+  // 축을 쓰면 고개를 돌려 이마 점이 한쪽으로 밀려도 모자가 머리 가운데에 남는다.
+  const crown = {
+    x: chin.x + (top.x - chin.x) * 1.44,
+    y: chin.y + (top.y - chin.y) * 1.44,
+  };
+
+  return { nose: P(1), cheeks: [P(50), P(280)], crown, width, ang };
 }
 
 /* ── 그리기 ──────────────────────────────────────────── */
@@ -237,27 +249,27 @@ function drawClown(ctx, f) {
   const w = f.width;
   ctx.save();
 
-  // 볼터치 — 가장자리가 보이면 붙여 놓은 색종이가 된다. 가운데만 진하게 둔다.
+  // 볼터치 — 가장자리가 보이면 붙여 놓은 색종이가 된다. 가운데만 옅게 물들인다.
   for (const c of f.cheeks) {
-    const cr = w * 0.15;
+    const cr = w * 0.14;
     const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, cr);
-    g.addColorStop(0, "rgba(255,86,104,0.5)");
-    g.addColorStop(0.5, "rgba(255,96,112,0.26)");
-    g.addColorStop(1, "rgba(255,120,130,0)");
+    g.addColorStop(0, "rgba(255,112,132,0.34)");
+    g.addColorStop(0.45, "rgba(255,124,142,0.18)");
+    g.addColorStop(1, "rgba(255,140,152,0)");
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.ellipse(c.x, c.y, cr, cr * 0.82, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // 고깔 — 챙 너비를 머리 폭에 맞춘다. 이마 점(10)은 얼굴 폭과 함께 움직이므로
-  // 얼굴 폭을 기준으로 재면 멀리 있든 가까이 있든 같은 비율로 얹힌다.
+  // 고깔 — 챙을 머리 폭에 맞춘다. 얼굴 폭(광대~광대)은 머리카락까지 친
+  // 머리 폭의 3분의 2쯤이라, 그대로 쓰면 모자가 머리에 얹히지 않고 올라앉는다.
   ctx.save();
-  ctx.translate(f.top.x, f.top.y);
+  ctx.translate(f.crown.x, f.crown.y);
   ctx.rotate(f.ang);
 
-  const brimW = w * 0.92;
-  const bw = w * 0.78, bh = w * 0.9, foot = -w * 0.05;
+  const brimW = w * 1.45;
+  const bw = brimW * 0.8, bh = w * 1.05, foot = 0;
   const brimR = brimW / 8;
 
   ctx.shadowColor = "rgba(0,0,0,0.35)";
