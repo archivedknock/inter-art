@@ -33,6 +33,13 @@
 <b>두 손을 모으면</b> 그제야 제 속도가 나고 남은 시간이 줄어듭니다.<br>
 99%에 닿으면 남은 시간 싸움입니다 — 끝까지 빌면 완료, 손을 놓으면 도로 늘어나다 <b>에러</b>.</td>
 </tr>
+<tr>
+<td width="60" align="center">🤹</td>
+<td><b>삐에로 저글링</b> · <code>/juggle.html</code><br>
+배경이 별밭으로 바뀌고 얼굴에 빨간 코와 고깔이 얹힙니다. 어도비 아이콘이 아래에서 떠오릅니다.<br>
+<b>손바닥으로 튕겨</b> 올립니다. 여덟 번 튕길 때마다 프로그램이 하나씩 늘어 여섯 개까지 갑니다.<br>
+떨어뜨리면 <b>강제 종료</b> 알림이 뜨고, 잠시 뒤 다시 실행됩니다. 끝은 없습니다.</td>
+</tr>
 </table>
 
 ## 🎬 저장
@@ -78,24 +85,25 @@
 
 ## 🛠️ 기술 구성
 
-- **[MediaPipe Tasks Vision](https://ai.google.dev/edge/mediapipe/solutions/vision) 1.0.1** — `HandLandmarker`, `FaceLandmarker` (CDN에서 ESM으로 로드)
+- **[MediaPipe Tasks Vision](https://ai.google.dev/edge/mediapipe/solutions/vision) 1.0.1** — `HandLandmarker`, `FaceLandmarker`, `ImageSegmenter` (CDN에서 ESM으로 로드)
 - **브라우저 표준 API** — `getUserMedia`, Canvas 2D, `canvas.captureStream()`, `MediaRecorder`, Web Audio
 - 프레임워크 및 번들러를 사용하지 않으며, 별도의 서버를 요구하지 않습니다.
 
 | 파일 | 역할 |
 |---|---|
 | 🏠 `index.html` · `home.css` | 메인 페이지 (작품 목록) |
-| 📄 `pray.html` | 작품 페이지 |
+| 📄 `pray.html` · `juggle.html` | 작품 페이지 |
 | 🗂️ `works.js` | 작품 목록 정보 (이름·아이콘·필요한 모델) |
 | 🧱 `ui.js` | 작품 화면 구성 (무대·툴바) |
 | ⚙️ `app.js` | 웹캠 제어, 모델 로딩, 렌더 루프, 녹화 및 저장 |
 | 🙏 `pray.js` | 렌더링 성공 기도하기 (합장 판정, 인코딩 창, 결과 창) |
+| 🤹 `juggle.js` | 삐에로 저글링 (손바닥 판정, 별밭 배경, 인물 오려내기, 분장) |
 | 🔭 `view.js` | 미러링과 화면 배율을 한곳에서 관리 |
 | 🔊 `audio.js` | 효과음 출력과 녹화용 오디오 합성 |
 | 🎨 `style.css` | 작품 화면 스타일 |
 
 작품마다 페이지가 하나씩 있으며, 화면 구성은 `ui.js`가 한 번만 만들어 페이지마다 같은
-마크업을 두지 않습니다. 인식 모델(손 7.8MB)은 작품을 처음 실행할 때만 내려받습니다.
+마크업을 두지 않습니다. 인식 모델(손 7.8MB, 얼굴 3.7MB, 인물 오려내기 0.25MB)은 작품이 쓰는 것만, 처음 실행할 때만 내려받습니다.
 
 준비 중인 작품의 파일(`save.*` `undo.*` `coffee.*`)도 저장소에 함께 있습니다. 공개할 때
 `works.js`에 항목을 되살리고 `app.js`에서 불러오면 됩니다.

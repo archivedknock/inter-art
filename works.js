@@ -25,6 +25,13 @@ export const WORKS = {
     tag: "달아나는 Ctrl+Z를 검지 끝으로 잡으세요",
     tasks: ["hand"],
   },
+  juggle: {
+    name: "삐에로 저글링",
+    icon: "🤹",
+    page: "juggle.html",
+    tag: "손바닥으로 어도비를 튕겨 올립니다",
+    tasks: ["hand", "face", "seg"],   // 분장에 얼굴, 배경을 오려내는 데 세그멘테이션이 필요하다
+  },
   coffee: {
     name: "커피콩 받기",
     icon: "☕",
