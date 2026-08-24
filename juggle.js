@@ -10,7 +10,6 @@ import { ac, fxOut } from "./audio.js";
 import { sx, sy, len, base } from "./view.js";
 
 const FONT = `"Pretendard Variable", "Pretendard", -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
-const MONO = `"SF Mono", "Menlo", "Consolas", "Courier New", monospace`;
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -36,8 +35,12 @@ const APPS = [
 
 const SKY = "#2a3ddb";
 const STAR = "#efe6d4";
-const CREAM = "#f2ece0";
-const RED = "#e02b20";
+
+// 고깔 — 파란 별밭에서 묻히지 않게 따뜻한 쪽으로 잡는다.
+// 몸통이 밝고 챙이 그보다 진하며, 점과 방울만 밝게 튄다.
+const HAT_BODY = "#ffd45e";
+const HAT_TRIM = "#e0392b";
+const HAT_DOT = "#fff6e2";
 
 /* ── 소리 ────────────────────────────────────────────── */
 
@@ -186,13 +189,13 @@ function starPath(ctx, x, y, r, rot) {
   ctx.closePath();
 }
 
-/** 어도비 아이콘 — 둥근 사각형에 두 글자.
+/** 어도비 아이콘 — 동그란 공에 두 글자.
  *
  *  한 바퀴 돌리지 않고 좌우로만 흔들린다. 뒤집히면 무슨 프로그램인지 읽을 수
  *  없고, 그것을 읽는 것이 이 작품의 전부다. */
 function drawIcon(ctx, b, t, alpha = 1) {
   const app = APPS[b.app];
-  const s = b.r * 1.8;
+  const r = b.r;
 
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -200,68 +203,107 @@ function drawIcon(ctx, b, t, alpha = 1) {
   ctx.rotate(Math.sin(t / 280 + b.phase) * 0.42);
 
   ctx.shadowColor = "rgba(0,0,0,0.45)";
-  ctx.shadowBlur = s * 0.2;
-  ctx.shadowOffsetY = s * 0.06;
-  roundRect(ctx, -s / 2, -s / 2, s, s, s * 0.235);
+  ctx.shadowBlur = r * 0.36;
+  ctx.shadowOffsetY = r * 0.12;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
   ctx.fillStyle = app.bg;
   ctx.fill();
   ctx.shadowBlur = 0;
   ctx.shadowOffsetY = 0;
 
   ctx.fillStyle = app.fg;
-  ctx.font = `600 ${s * 0.46}px ${FONT}`;
+  ctx.font = `600 ${r * 0.78}px ${FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(app.id, 0, s * 0.03);
+  ctx.fillText(app.id, 0, r * 0.05);
   ctx.restore();
 }
 
-/** 빨간 코, 볼터치, 줄무늬 고깔 */
+/** 원을 여러 개 이어 한 덩어리로 채운다 — 구름 모양 챙과 꽃 방울에 쓴다.
+ *
+ *  arc를 잇달아 부르면 앞 도형의 끝점에서 선이 이어져 버린다. 원마다
+ *  시작점을 옮겨 놓아야 겹친 자리에 금이 가지 않는다. */
+function blobPath(ctx, circles) {
+  ctx.beginPath();
+  for (const [cx, cy, r] of circles) {
+    ctx.moveTo(cx + r, cy);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  }
+}
+
+/** 빨간 코, 볼터치, 고깔 */
 function drawClown(ctx, f) {
   const w = f.width;
   ctx.save();
 
-  ctx.fillStyle = "rgba(255,92,110,0.4)";
+  // 볼터치 — 가장자리가 보이면 붙여 놓은 색종이가 된다. 가운데만 진하게 둔다.
   for (const c of f.cheeks) {
+    const cr = w * 0.15;
+    const g = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, cr);
+    g.addColorStop(0, "rgba(255,86,104,0.5)");
+    g.addColorStop(0.5, "rgba(255,96,112,0.26)");
+    g.addColorStop(1, "rgba(255,120,130,0)");
+    ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.ellipse(c.x, c.y, w * 0.11, w * 0.085, 0, 0, Math.PI * 2);
+    ctx.ellipse(c.x, c.y, cr, cr * 0.82, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // 고깔 — 삼각형으로 오려낸 자리에 줄무늬를 채운다
+  // 고깔 — 챙 너비를 머리 폭에 맞춘다. 이마 점(10)은 얼굴 폭과 함께 움직이므로
+  // 얼굴 폭을 기준으로 재면 멀리 있든 가까이 있든 같은 비율로 얹힌다.
   ctx.save();
   ctx.translate(f.top.x, f.top.y);
   ctx.rotate(f.ang);
-  const bw = w * 0.66, bh = w * 0.88, foot = -w * 0.04;
+
+  const brimW = w * 0.92;
+  const bw = w * 0.78, bh = w * 0.9, foot = -w * 0.05;
+  const brimR = brimW / 8;
 
   ctx.shadowColor = "rgba(0,0,0,0.35)";
   ctx.shadowBlur = w * 0.06;
+  ctx.shadowOffsetY = w * 0.02;
+
+  // 원뿔
   ctx.beginPath();
   ctx.moveTo(-bw / 2, foot);
   ctx.lineTo(bw / 2, foot);
   ctx.lineTo(0, foot - bh);
   ctx.closePath();
-  ctx.fillStyle = CREAM;
+  ctx.fillStyle = HAT_BODY;
+  ctx.fill();
+
+  // 구름처럼 봉우리진 챙
+  const bandY = foot - brimR * 0.5;
+  blobPath(ctx, [
+    ...[0, 1, 2, 3].map((i) => [-brimW / 2 + (brimW / 4) * (i + 0.5), bandY, brimR]),
+  ]);
+  ctx.fillStyle = HAT_TRIM;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(0, bandY, brimW / 2, brimR * 0.95, 0, 0, Math.PI);
   ctx.fill();
   ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
 
-  ctx.save();
-  ctx.clip();
-  ctx.fillStyle = RED;
-  const band = bh / 5;
-  for (let i = 0; i < 5; i++) {
-    ctx.fillRect(-bw, foot - band * (i + 0.9), bw * 2, band * 0.45);
-  }
-  ctx.restore();
+  // 몸통의 점 두 개와 꼭대기의 꽃 방울
+  const dr = bw * 0.1;
+  ctx.fillStyle = HAT_DOT;
+  blobPath(ctx, [[0, foot - bh * 0.4, dr], [0, foot - bh * 0.6, dr]]);
+  ctx.fill();
 
-  ctx.fillStyle = CREAM;
-  ctx.beginPath();
-  ctx.arc(0, foot - bh, w * 0.085, 0, Math.PI * 2);
+  const fr = bw * 0.17;
+  const fy = foot - bh - fr * 0.35;
+  blobPath(ctx, [
+    [0, fy, fr * 0.66],
+    ...[[0, -1], [1, 0], [0, 1], [-1, 0]].map(([dx, dy]) =>
+      [dx * fr * 0.6, fy + dy * fr * 0.6, fr * 0.6]),
+  ]);
   ctx.fill();
   ctx.restore();
 
   // 빨간 코
-  const nr = w * 0.1;
+  const nr = w * 0.155;
   const g = ctx.createRadialGradient(
     f.nose.x - nr * 0.3, f.nose.y - nr * 0.35, nr * 0.1,
     f.nose.x, f.nose.y, nr
@@ -307,7 +349,7 @@ function drawAlert(ctx, W, H, a, t) {
   const is = h * 0.34;
 
   // 종료된 프로그램의 아이콘이 알림 왼쪽 위에 붙는다
-  drawIcon(ctx, { app: a.app, x: x + pad + is / 2, y: y + pad + is / 2, r: is / 1.8, phase: 0 }, 0);
+  drawIcon(ctx, { app: a.app, x: x + pad + is / 2, y: y + pad + is / 2, r: is / 2, phase: 0 }, 0);
 
   const tx = x + pad + is + h * 0.1;
   const maxW = x + w - pad - tx;
@@ -575,71 +617,6 @@ export class JuggleShow {
 
     if (this.face) drawClown(ctx, this.face);
     for (const b of this.balls) drawIcon(ctx, b, t);
-    this.drawPanel(ctx, W, H);
     if (this.alert) drawAlert(ctx, W, H, this.alert, t);
-  }
-
-  /** 상단 패널 — 안에서 도는 것이 어도비이므로 어도비 얼굴을 한다 */
-  drawPanel(ctx, W, H) {
-    const h = Math.round(H * 0.082);
-    const w = Math.min(W * 0.5, H * 0.9);
-    const x = Math.round((W - w) / 2), y = Math.round(H * 0.035);
-    const pad = h * 0.22;
-    const full = this.balls.length >= APPS.length;
-
-    ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.35)";
-    ctx.shadowBlur = h * 0.3;
-    ctx.shadowOffsetY = h * 0.08;
-    roundRect(ctx, x, y, w, h, h * 0.17);
-    ctx.fillStyle = "#1e1e1e";
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // 실행한 프로그램 — 지금 떠 있는 것만 제 색이고, 종료된 것은 꺼져 있다
-    const running = new Set(this.balls.map((b) => b.app));
-    const cs = h * 0.56, gap = cs * 0.26;
-    APPS.forEach((app, i) => {
-      const cx = x + pad + cs / 2 + i * (cs + gap);
-      const cy = y + h / 2;
-      if (i >= this.opened) {
-        roundRect(ctx, cx - cs / 2, cy - cs / 2, cs, cs, cs * 0.235);
-        ctx.fillStyle = "rgba(255,255,255,0.06)";
-        ctx.fill();
-        return;
-      }
-      drawIcon(ctx, { app: i, x: cx, y: cy, r: cs / 1.8, phase: 0 }, 0,
-        running.has(i) ? 1 : 0.22);
-    });
-
-    // 메모리 — 여섯 개가 다 떠 있으면 붉어진다
-    const bw = w * 0.22, bh = h * 0.16;
-    const bx = x + w - pad - bw, by = y + h * 0.58;
-    ctx.font = `500 ${h * 0.2}px ${FONT}`;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = full ? "#e5484d" : "#a0a0a0";
-    ctx.fillText(full ? "메모리 부족" : "메모리", bx, y + h * 0.42);
-
-    roundRect(ctx, bx, by, bw, bh, bh / 2);
-    ctx.fillStyle = "#3a3a3a";
-    ctx.fill();
-    const k = this.balls.length / APPS.length;
-    if (k > 0) {
-      roundRect(ctx, bx, by, Math.max(bh, bw * k), bh, bh / 2);
-      ctx.fillStyle = full ? "#e5484d" : k > 0.6 ? "#d99a2b" : "#3a9c5a";
-      ctx.fill();
-    }
-
-    ctx.font = `500 ${h * 0.26}px ${MONO}`;
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#e8e8e8";
-    ctx.fillText(String(this.hits).padStart(3, "0"), bx - h * 0.28, y + h / 2);
-    ctx.restore();
   }
 }
